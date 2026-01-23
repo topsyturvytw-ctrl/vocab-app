@@ -3,15 +3,16 @@ import csv
 import random
 import io
 
-# 1. 資料加載函數：這裡預留位置讓你貼上完整的 CSV 內容
+# 1. 資料加載函數：請在此貼上你完整的 CSV 內容 (包含單字、詞性、中文)
 def get_all_words():
-    # 目前先放 5 個測試，成功後你可以把整個 CSV 內容貼在下面三個引號中間
-    raw_csv_data = """單字 (Word),中文翻譯
-abandon,放棄
-ability,能力
-aboard,在船(飛機/車)上
-about,關於
-above,在...上方"""
+    # 下方三個引號中間，請貼上你 CSV 的全部文字
+    # 務必確保第一行標頭正確，例如：單字 (Word),詞性 (POS),中文翻譯
+    raw_csv_data = """單字 (Word),詞性 (POS),中文翻譯
+abandon,v.,放棄
+ability,n.,能力
+aboard,adv./prep.,在船(飛機/車)上
+about,prep./adv.,關於
+above,prep./adv.,在...上方"""
     
     f = io.StringIO(raw_csv_data.strip())
     return list(csv.DictReader(f))
@@ -21,45 +22,61 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
+    page.padding = 20
 
-    # 初始化資料
+    # 初始化資料與紀錄
     all_words = get_all_words()
     session_words = []
     current_index = 0
-    rem_list = []
-    forg_list = []
+    
+    def get_storage(key): return page.client_storage.get(key) or []
+    def set_storage(key, value): page.client_storage.set(key, value)
 
-    # UI 元件
+    # --- UI 元件 ---
     word_display = ft.Text("皇翔單字機", size=45, weight="bold", color="blue")
-    mean_display = ft.Text("點擊按鈕開始", size=24, color="black")
+    pos_display = ft.Text("", size=18, italic=True, color="grey") # 新增詞性顯示
+    mean_display = ft.Text("點選下方模式開始", size=24, color="black")
     stat_text = ft.Text("", size=16, color="grey")
-    total_info = ft.Text("系統已就緒", size=14)
+    total_info = ft.Text("", size=14)
 
     def update_total_info():
-        total_info.value = f"本次紀錄 -> O: {len(rem_list)} | X: {len(forg_list)}"
+        rem = get_storage("rem_list")
+        forg = get_storage("forg_list")
+        total_info.value = f"累計標記 -> O: {len(rem)} | X: {len(forg)}"
         page.update()
 
     def update_ui():
         if session_words:
             w = session_words[current_index]
-            # 這裡增加一個防錯，萬一 CSV 欄位名稱對不上，改抓前兩個欄位
+            # 兼容欄位名稱，若找不到則抓索引
             word_val = w.get('單字 (Word)') or list(w.values())[0]
-            mean_val = w.get('中文翻譯') or list(w.values())[1]
+            pos_val = w.get('詞性 (POS)') or list(w.values())[1]
+            mean_val = w.get('中文翻譯') or list(w.values())[2]
+            
             word_display.value = word_val
+            pos_display.value = f"({pos_val})" if pos_val else ""
             mean_display.value = mean_val
-            stat_text.value = f"進度: {current_index + 1} / {len(session_words)}"
+            stat_text.value = f"目前進度: {current_index + 1} / {len(session_words)}"
             page.update()
 
     def mark(status):
         nonlocal current_index
-        if not session_words or word_display.value == "練習結束": return
+        if not session_words or word_display.value in ["練習結束", "無資料"]: return
         
-        w_id = word_display.value
+        # 以「單字+中文」作為唯一識別碼，避免重複標記
+        w_id = f"{word_display.value}_{mean_display.value}"
+        rem = get_storage("rem_list")
+        forg = get_storage("forg_list")
+        
         if status == "O":
-            if w_id not in rem_list: rem_list.append(w_id)
+            if w_id not in rem: rem.append(w_id)
+            if w_id in forg: forg.remove(w_id)
         else:
-            if w_id not in forg_list: forg_list.append(w_id)
-        
+            if w_id not in forg: forg.append(w_id)
+            if w_id in rem: rem.remove(w_id)
+            
+        set_storage("rem_list", rem)
+        set_storage("forg_list", forg)
         update_total_info()
 
         if current_index < len(session_words) - 1:
@@ -67,33 +84,65 @@ def main(page: ft.Page):
             update_ui()
         else:
             word_display.value = "練習結束"
-            mean_display.value = "做得好！請重新開始"
+            pos_display.value = ""
+            mean_display.value = "切換模式繼續挑戰"
             page.update()
 
-    def start_session():
+    def start_session(mode):
         nonlocal session_words, current_index
         if not all_words: return
-        # 隨機抽取 30 個單字
-        session_words = random.sample(all_words, min(30, len(all_words)))
-        current_index = 0
-        update_ui()
+        
+        rem = get_storage("rem_list")
+        forg = get_storage("forg_list")
 
-    # 建立介面（移除所有可能報錯的 Icon）
+        if mode == "30":
+            session_words = random.sample(all_words, min(30, len(all_words)))
+        elif mode == "review_o":
+            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[2])}" in rem]
+        elif mode == "review_x":
+            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[2])}" in forg]
+        
+        if not session_words:
+            word_display.value = "無資料"
+            pos_display.value = ""
+            mean_display.value = "該清單目前是空的"
+            page.update()
+        else:
+            current_index = 0
+            update_ui()
+
+    def reset_all():
+        page.client_storage.clear()
+        update_total_info()
+        word_display.value = "已重置"
+        pos_display.value = ""
+        mean_display.value = "紀錄已清空"
+        page.update()
+
+    # --- 介面佈局 ---
     page.add(
         ft.Column([
             ft.Text("皇翔單字機 3.0", size=18, weight="bold"),
             total_info,
             ft.Divider(),
             word_display,
+            pos_display,  # 顯示詞性
             mean_display,
             stat_text,
+            ft.Container(height=10),
             ft.Row([
-                ft.ElevatedButton("O 記得", on_click=lambda _: mark("O"), bgcolor="green", color="white", width=120),
-                ft.ElevatedButton("X 忘記", on_click=lambda _: mark("X"), bgcolor="red", color="white", width=120),
+                ft.ElevatedButton("O 記得", on_click=lambda _: mark("O"), bgcolor="green", color="white", width=130),
+                ft.ElevatedButton("X 忘記", on_click=lambda _: mark("X"), bgcolor="red", color="white", width=130),
             ], alignment="center"),
-            ft.Container(height=20),
-            ft.ElevatedButton("開始隨機 30 題", on_click=lambda _: start_session(), width=250),
+            ft.Divider(),
+            ft.Row([
+                ft.OutlinedButton("隨機30題", on_click=lambda _: start_session("30")),
+                ft.OutlinedButton("複習 X", on_click=lambda _: start_session("review_x")),
+                ft.OutlinedButton("複習 O", on_click=lambda _: start_session("review_o")),
+            ], alignment="center"),
+            ft.TextButton("清除所有紀錄", on_click=lambda _: reset_all(), icon=ft.icons.RECYCLING, icon_color="orange"),
         ], horizontal_alignment="center")
     )
+    update_total_info()
 
 ft.app(target=main)
