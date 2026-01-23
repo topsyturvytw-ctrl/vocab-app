@@ -4,94 +4,86 @@ import random
 import os
 
 def main(page: ft.Page):
-    # 設定頁面基礎屬性
+    # 1. 基礎設定：強制白色背景避免黑屏
     page.title = "皇翔單字機"
+    page.bgcolor = ft.colors.WHITE
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 30
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.bgcolor = ft.colors.WHITE
 
-    # 儲存單字的清單
+    # 2. 建立顯示元件
+    word_display = ft.Text("點擊開始", size=40, weight="bold", color=ft.colors.BLUE)
+    mean_display = ft.Text("等待中...", size=20, color=ft.colors.BLACK54)
+    error_log = ft.Text("", color=ft.colors.RED, size=12)
+
     words = []
-    
-    # 檔案路徑與讀取邏輯
-    csv_filename = "vocabulary_full_list.csv"
-    
-    def load_data():
+
+    # 3. 強化版讀取邏輯
+    def load_words():
         nonlocal words
-        try:
-            # 優先嘗試在當前目錄與 assets 目錄尋找檔案
-            target_path = csv_filename if os.path.exists(csv_filename) else f"assets/{csv_filename}"
-            
-            if not os.path.exists(target_path):
-                return f"找不到檔案: {csv_filename}"
+        csv_path = "vocabulary_full_list.csv"
+        
+        # 檢查檔案是否存在
+        if not os.path.exists(csv_path):
+            if os.path.exists(f"assets/{csv_path}"):
+                csv_path = f"assets/{csv_path}"
+            else:
+                return f"找不到檔案: {csv_path}"
 
-            # 嘗試 UTF-8 編碼讀取
+        # 嘗試多種編碼順序：utf-8 -> big5 -> utf-8-sig (Excel 帶 BOM)
+        encodings = ['utf-8', 'big5', 'utf-8-sig', 'cp950']
+        last_error = ""
+        
+        for enc in encodings:
             try:
-                with open(target_path, mode='r', encoding='utf-8') as f:
+                with open(csv_path, mode='r', encoding=enc) as f:
                     reader = csv.DictReader(f)
-                    words = list(reader)
-            except UnicodeDecodeError:
-                # 如果 UTF-8 失敗，改用 Big5 (Excel 常見編碼)
-                with open(target_path, mode='r', encoding='big5') as f:
-                    reader = csv.DictReader(f)
-                    words = list(reader)
-            
-            if not words:
-                return "CSV 檔案內沒有資料"
-            return None
-        except Exception as e:
-            return str(e)
+                    words = [row for row in reader if row.get('word')]
+                    if words:
+                        return None # 讀取成功
+            except Exception as e:
+                last_error = str(e)
+                continue
+        return f"所有編碼嘗試失敗。最後錯誤: {last_error}"
 
-    # 初始化讀取
-    error_msg = load_data()
-
-    # UI 元件定義
-    word_display = ft.Text("點擊按鈕開始", size=45, weight="bold", color="blue")
-    mean_display = ft.Text("", size=25, color="grey-700")
-    status_display = ft.Text("Ready to Study", color="green-600")
-
-    if error_msg:
-        word_display.value = "讀取失敗"
-        mean_display.value = error_msg
-        mean_display.color = "red"
-
-    def handle_next(e):
+    # 4. 點擊事件
+    def next_word(e):
         if words:
             pick = random.choice(words)
-            # 確保欄位名稱符合你的 CSV (word, meaning)
-            word_display.value = pick.get('word', '無單字欄位')
-            mean_display.value = pick.get('meaning', '無翻譯欄位')
-            status_display.value = f"已載入 {len(words)} 個單字"
-            page.update()
+            word_display.value = pick.get('word', '欄位錯誤')
+            mean_display.value = pick.get('meaning', '無翻譯')
+        else:
+            word_display.value = "庫存為空"
+        page.update()
 
-    # 建立畫面佈局
+    # 5. 執行載入
+    err = load_words()
+    if err:
+        error_log.value = err
+        # 備用資料，避免 App 變空殼
+        words = [{"word": "Loading Error", "meaning": "請檢查 CSV 編碼"}]
+
+    # 6. 建置畫面佈局
     page.add(
         ft.Column(
             [
-                ft.Icon(ft.icons.AUTO_STORIES, size=50, color="blue-400"),
-                ft.Text("Huangxiang Vocab Master", size=16, italic=True),
-                ft.Divider(height=40, thickness=2),
+                ft.Text("Huangxiang Study Tool", size=14, color=ft.colors.GREY_500),
+                ft.Divider(),
                 word_display,
-                ft.Container(height=10),
                 mean_display,
-                ft.Container(height=50),
+                ft.Container(height=30),
                 ft.ElevatedButton(
-                    content=ft.Text("下一個單字", size=20, weight="bold"),
-                    on_click=handle_next,
-                    style=ft.ButtonStyle(
-                        padding=20,
-                        shape=ft.RoundedRectangleBorder(radius=10),
-                    ),
-                    width=250,
+                    "下一個單字", 
+                    on_click=next_word,
+                    width=200,
+                    height=50
                 ),
                 ft.Container(height=20),
-                status_display,
+                error_log
             ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
     )
+    page.update()
 
-if __name__ == "__main__":
-    ft.app(target=main)
+ft.app(target=main)
