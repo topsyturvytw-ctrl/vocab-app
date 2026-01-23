@@ -4,115 +4,99 @@ import random
 import os
 
 def main(page: ft.Page):
-    # 基礎設定
+    # 網頁版基礎設定
+    page.title = "皇翔單字機 (Web)"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.bgcolor = "white"
+    page.padding = 20
+    page.scroll = "auto"
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
+
+    # 語音元件
+    tts = ft.TextToSpeech()
+    page.overlay.append(tts)
 
     # 狀態變數
     all_words = []
     session_words = []
     current_index = 0
-    
-    # 建立紀錄檔案路徑
-    record_file = os.path.join(page.utils.get_user_data_dir(), "hx_record.txt")
 
     # UI 元件
-    word_display = ft.Text("單字載入中", size=45, weight="bold", color="blue")
-    mean_display = ft.Text("請稍候", size=24, color="black")
-    stat_text = ft.Text("請點擊下方模式開始", size=16, color="grey")
+    word_display = ft.Text("點擊開始", size=45, weight="bold", color="blue")
+    mean_display = ft.Text("網頁版載入成功", size=24, color="black")
+    stat_text = ft.Text("", size=16, color="grey")
     total_info = ft.Text("", size=12)
 
-    def get_records():
-        """讀取長期紀錄：格式為 word|status"""
-        records = {}
-        if os.path.exists(record_file):
-            with open(record_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    if "|" in line:
-                        w, s = line.strip().split("|")
-                        records[w] = s
-        return records
+    # 讀取/儲存紀錄 (網頁版會自動存入瀏覽器 LocalStorage)
+    def update_total_info():
+        rem = page.client_storage.get("rem_list") or []
+        forg = page.client_storage.get("forg_list") or []
+        total_info.value = f"累計標記 -> 已記得(O): {len(rem)} | 忘記(X): {len(forg)}"
+        page.update()
 
-    def save_record(word, status):
-        """儲存紀錄"""
-        records = get_records()
-        records[word] = status
-        with open(record_file, "w", encoding="utf-8") as f:
-            for w, s in records.items():
-                f.write(f"{w}|{s}\n")
+    def mark(status):
+        nonlocal current_index
+        w_id = word_display.value
+        rem = page.client_storage.get("rem_list") or []
+        forg = page.client_storage.get("forg_list") or []
+
+        if status == "O":
+            if w_id not in rem: rem.append(w_id)
+            if w_id in forg: forg.remove(w_id)
+        else:
+            if w_id not in forg: forg.append(w_id)
+            if w_id in rem: rem.remove(w_id)
+        
+        page.client_storage.set("rem_list", rem)
+        page.client_storage.set("forg_list", forg)
         update_total_info()
 
-    def update_total_info():
-        recs = get_records()
-        os_count = list(recs.values()).count("O")
-        xs_count = list(recs.values()).count("X")
-        total_info.value = f"目前累計標記 -> 已記得(O): {os_count} | 忘記(X): {xs_count}"
-        page.update()
+        if current_index < len(session_words) - 1:
+            current_index += 1
+            update_ui()
+        else:
+            word_display.value = "單元完成"
+            page.update()
 
     def update_ui():
         if session_words:
             w = session_words[current_index]
-            word_val = ""
-            mean_val = ""
-            for k, v in w.items():
-                k_c = k.strip() if k else ""
-                if "單字" in k_c or "Word" in k_c: word_val = v
-                if "翻譯" in k_c or "meaning" in k_c: mean_val = v
+            word_val = w.get('單字 (Word)', '').strip() or list(w.values())[0]
+            mean_val = w.get('中文翻譯', '').strip() or list(w.values())[1]
             
             word_display.value = word_val
             mean_display.value = mean_val
-            stat_text.value = f"目前進度: {current_index + 1} / {len(session_words)}"
-            page.update()
-
-    def mark(status):
-        nonlocal current_index
-        if session_words:
-            current_word = word_display.value
-            save_record(current_word, status)
+            stat_text.value = f"進度: {current_index + 1} / {len(session_words)}"
             
-            if current_index < len(session_words) - 1:
-                current_index += 1
-                update_ui()
-            else:
-                word_display.value = "單元完成"
-                mean_display.value = "請選擇下一個模式"
-                page.update()
+            # 網頁版語音觸發
+            if word_val:
+                tts.speak(word_val)
+            page.update()
 
     def start_session(mode):
         nonlocal session_words, current_index
-        recs = get_records()
+        if not all_words: return
+        
+        recs_rem = page.client_storage.get("rem_list") or []
+        recs_forg = page.client_storage.get("forg_list") or []
         
         if mode == "30":
             session_words = random.sample(all_words, min(30, len(all_words)))
-        elif mode == "review_o":
-            o_list = [w for w in all_words if recs.get(w.get('單字 (Word)', '').strip()) == "O"]
-            session_words = o_list if o_list else []
         elif mode == "review_x":
-            x_list = [w for w in all_words if recs.get(w.get('單字 (Word)', '').strip()) == "X"]
-            session_words = x_list if x_list else []
-
+            session_words = [w for w in all_words if w.get('單字 (Word)', '').strip() in recs_forg]
+        
         if not session_words:
-            word_display.value = "尚無紀錄"
-            mean_display.value = "請先進行隨機練習"
+            word_display.value = "目前無紀錄"
             page.update()
         else:
             current_index = 0
             update_ui()
 
-    def reset_data(e):
-        if os.path.exists(record_file):
-            os.remove(record_file)
-        update_total_info()
-        word_display.value = "已清空紀錄"
-        page.update()
-
     # 畫面佈局
     page.add(
         ft.Column(
             [
-                ft.Text("皇翔單字管理系統", size=18, weight="bold"),
+                ft.Text("皇翔單字機 3.0 (Web版)", size=18, weight="bold"),
                 total_info,
                 ft.Divider(),
                 word_display,
@@ -125,29 +109,29 @@ def main(page: ft.Page):
                 ft.Container(height=20),
                 ft.Row([
                     ft.OutlinedButton("隨機30題", on_click=lambda _: start_session("30")),
-                    ft.OutlinedButton("複習 O", on_click=lambda _: start_session("review_o")),
-                    ft.OutlinedButton("複習 X", on_click=lambda _: start_session("review_x")),
+                    ft.OutlinedButton("複習 X 單字", on_click=lambda _: start_session("review_x")),
                 ], alignment="center"),
-                ft.TextButton("重製所有標記", on_click=reset_data, icon=ft.icons.DELETE_FOREVER),
+                ft.TextButton("清除所有紀錄", on_click=lambda _: [page.client_storage.clear(), update_total_info()])
             ],
             horizontal_alignment="center",
         )
     )
 
-    # 讀取 CSV
-    path = "vocabulary_full_list.csv"
-    if not os.path.exists(path): path = f"assets/{path}"
-    if os.path.exists(path):
-        for enc in ['utf-8-sig', 'cp950', 'big5', 'utf-8']:
-            try:
-                with open(path, "r", encoding=enc) as f:
-                    all_words = list(csv.DictReader(f))
-                    if all_words:
-                        word_display.value = "載入完成"
-                        mean_display.value = f"共 {len(all_words)} 字"
-                        update_total_info()
-                        break
-            except: continue
+    # 網頁版讀取 CSV 的特殊處理
+    # 網頁版資產通常放在 assets 目錄
+    csv_path = "assets/vocabulary_full_list.csv"
+    if not os.path.exists(csv_path):
+        csv_path = "vocabulary_full_list.csv"
+
+    try:
+        with open(csv_path, "r", encoding='utf-8-sig') as f:
+            all_words = list(csv.DictReader(f))
+            word_display.value = "準備就緒"
+            mean_display.value = f"已讀取 {len(all_words)} 字"
+            update_total_info()
+    except Exception as e:
+        mean_display.value = "讀取失敗，請確認 CSV 檔案"
+    
     page.update()
 
-ft.app(target=main)
+ft.app(target=main, assets_dir="assets")
