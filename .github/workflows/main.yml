@@ -3,7 +3,7 @@ name: Deploy Flet Web to GitHub Pages
 on:
   push:
     branches:
-      - main  # 當你更新 main.py 時自動執行
+      - main  # 每次你更新 main.py 或 CSV 時都會觸發
 
 permissions:
   contents: write
@@ -12,22 +12,30 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install Flet and Dependencies
+      - name: Install Dependencies
         run: |
-          pip install flet
-          # 如果你有其他 library，請在這裡加 pip install
+          pip install --upgrade pip
+          pip install flet --upgrade  # 確保安裝最新版以支援 TextToSpeech
 
-      - name: Build Web Version
+      - name: Build Flet Web
         run: |
-          # 將 main.py 編譯成網頁檔案，並指定基本路徑為專案名稱
-          flet publish main.py --base-url /${{ github.event.repository.name }}/
+          # 自動取得儲存庫名稱作為 Base URL 路徑
+          REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)
+          flet publish main.py --base-url /$REPO_NAME/
+
+      - name: Deploy to GitHub Pages
+        uses: Peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist  # Flet 編譯後產生的資料夾
 
       - name: Deploy to GitHub Pages
         uses: Peaceiris/actions-gh-pages@v3
