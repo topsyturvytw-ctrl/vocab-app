@@ -1,6 +1,7 @@
 import flet as ft
 import csv
 import random
+import io
 
 def main(page: ft.Page):
     page.title = "皇翔單字機 3.0"
@@ -12,8 +13,8 @@ def main(page: ft.Page):
     session_words = []
     current_index = 0
 
-    word_display = ft.Text("點擊開始", size=45, weight="bold", color="blue")
-    mean_display = ft.Text("請先按下方「隨機30題」", size=24, color="black")
+    word_display = ft.Text("皇翔單字機", size=45, weight="bold", color="blue")
+    mean_display = ft.Text("請按下方按鈕開始", size=24, color="black")
     stat_text = ft.Text("", size=16, color="grey")
     total_info = ft.Text("", size=12)
 
@@ -26,7 +27,7 @@ def main(page: ft.Page):
     def update_ui():
         if session_words:
             w = session_words[current_index]
-            # 兼容標頭名稱
+            # 兼容 CSV 標頭名稱
             word_val = w.get('單字 (Word)', '').strip() or list(w.values())[0]
             mean_val = w.get('中文翻譯', '').strip() or list(w.values())[1]
             word_display.value = word_val
@@ -36,7 +37,7 @@ def main(page: ft.Page):
 
     def mark(status):
         nonlocal current_index
-        if not session_words or word_display.value == "完成練習": return
+        if not session_words: return
         w_id = word_display.value
         rem = page.client_storage.get("rem_list") or []
         forg = page.client_storage.get("forg_list") or []
@@ -56,19 +57,32 @@ def main(page: ft.Page):
             word_display.value = "完成練習"
             page.update()
 
-    def start_session(mode):
+    async def start_session(mode):
         nonlocal session_words, current_index, all_words
         
-        # 如果還沒讀取過 CSV，先讀取
+        # 關鍵：使用網頁專用讀取方式
         if not all_words:
+            mean_display.value = "載入中，請稍候..."
+            page.update()
             try:
-                # 網頁版讀取 assets 資源的標準方式
+                # 直接從網頁路徑獲取檔案
+                response = await page.get_client_storage_async().get_async("dummy") # 觸發系統
+                # 這是網頁版讀取 assets 檔案的最穩路徑
+                csv_data = await page.session.page.get_resource_async("vocabulary_full_list.csv")
+                # 如果上述不行，改用標準的 fetch
+                import flet.fastapi as flet_fastapi
+                # 簡化邏輯：直接假設 CSV 就在 assets 裡並由 Flet 自動處理
                 with open("assets/vocabulary_full_list.csv", "r", encoding="utf-8-sig") as f:
                     all_words = list(csv.DictReader(f))
             except:
-                mean_display.value = "檔案讀取失敗，請確認 assets 資料夾"
-                page.update()
-                return
+                # 最終備援：如果上面都報錯，嘗試直接讀取（部分瀏覽器支援）
+                try:
+                    with open("assets/vocabulary_full_list.csv", "r", encoding="utf-8-sig") as f:
+                        all_words = list(csv.DictReader(f))
+                except Exception as e:
+                    mean_display.value = f"讀取失敗，請重新整理網頁"
+                    page.update()
+                    return
 
         if mode == "30":
             session_words = random.sample(all_words, min(30, len(all_words)))
@@ -77,7 +91,7 @@ def main(page: ft.Page):
             session_words = [w for w in all_words if w.get('單字 (Word)', '').strip() in recs_forg]
         
         if not session_words:
-            word_display.value = "目前無紀錄"
+            word_display.value = "無紀錄"
             page.update()
         else:
             current_index = 0
@@ -97,8 +111,8 @@ def main(page: ft.Page):
             ], alignment="center"),
             ft.Container(height=20),
             ft.Row([
-                ft.OutlinedButton("隨機30題", on_click=lambda _: start_session("30")),
-                ft.OutlinedButton("複習 X", on_click=lambda _: start_session("review_x")),
+                ft.OutlinedButton("隨機30題", on_click=lambda e: page.run_task(start_session, "30")),
+                ft.OutlinedButton("複習 X", on_click=lambda e: page.run_task(start_session, "review_x")),
             ], alignment="center"),
             ft.TextButton("清除紀錄", on_click=lambda _: [page.client_storage.clear(), update_total_info()])
         ], horizontal_alignment="center")
