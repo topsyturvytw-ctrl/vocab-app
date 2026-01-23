@@ -3,10 +3,8 @@ import csv
 import random
 import io
 
-# 1. 資料加載函數：請在此貼上你完整的 CSV 內容 (包含單字、詞性、中文)
 def get_all_words():
-    # 下方三個引號中間，請貼上你 CSV 的全部文字
-    # 務必確保第一行標頭正確，例如：單字 (Word),詞性 (POS),中文翻譯
+    # 請在此貼上完整的 CSV 內容
     raw_csv_data = """單字 (Word),詞性 (POS),中文翻譯
 abandon,v.,放棄
 ability,n.,能力
@@ -24,7 +22,6 @@ def main(page: ft.Page):
     page.horizontal_alignment = "center"
     page.padding = 20
 
-    # 初始化資料與紀錄
     all_words = get_all_words()
     session_words = []
     current_index = 0
@@ -32,10 +29,9 @@ def main(page: ft.Page):
     def get_storage(key): return page.client_storage.get(key) or []
     def set_storage(key, value): page.client_storage.set(key, value)
 
-    # --- UI 元件 ---
     word_display = ft.Text("皇翔單字機", size=45, weight="bold", color="blue")
-    pos_display = ft.Text("", size=18, italic=True, color="grey") # 新增詞性顯示
-    mean_display = ft.Text("點選下方模式開始", size=24, color="black")
+    pos_display = ft.Text("", size=18, italic=True, color="grey")
+    mean_display = ft.Text("請選擇模式開始", size=24, color="black")
     stat_text = ft.Text("", size=16, color="grey")
     total_info = ft.Text("", size=14)
 
@@ -48,7 +44,6 @@ def main(page: ft.Page):
     def update_ui():
         if session_words:
             w = session_words[current_index]
-            # 兼容欄位名稱，若找不到則抓索引
             word_val = w.get('單字 (Word)') or list(w.values())[0]
             pos_val = w.get('詞性 (POS)') or list(w.values())[1]
             mean_val = w.get('中文翻譯') or list(w.values())[2]
@@ -63,7 +58,6 @@ def main(page: ft.Page):
         nonlocal current_index
         if not session_words or word_display.value in ["練習結束", "無資料"]: return
         
-        # 以「單字+中文」作為唯一識別碼，避免重複標記
         w_id = f"{word_display.value}_{mean_display.value}"
         rem = get_storage("rem_list")
         forg = get_storage("forg_list")
@@ -85,7 +79,7 @@ def main(page: ft.Page):
         else:
             word_display.value = "練習結束"
             pos_display.value = ""
-            mean_display.value = "切換模式繼續挑戰"
+            mean_display.value = "點擊複習按鈕繼續"
             page.update()
 
     def start_session(mode):
@@ -105,7 +99,7 @@ def main(page: ft.Page):
         if not session_words:
             word_display.value = "無資料"
             pos_display.value = ""
-            mean_display.value = "該清單目前是空的"
+            mean_display.value = "該標記清單目前是空的"
             page.update()
         else:
             current_index = 0
@@ -116,17 +110,16 @@ def main(page: ft.Page):
         update_total_info()
         word_display.value = "已重置"
         pos_display.value = ""
-        mean_display.value = "紀錄已清空"
+        mean_display.value = "所有標記已清空"
         page.update()
 
-    # --- 介面佈局 ---
     page.add(
         ft.Column([
             ft.Text("皇翔單字機 3.0", size=18, weight="bold"),
             total_info,
             ft.Divider(),
             word_display,
-            pos_display,  # 顯示詞性
+            pos_display,
             mean_display,
             stat_text,
             ft.Container(height=10),
@@ -136,11 +129,11 @@ def main(page: ft.Page):
             ], alignment="center"),
             ft.Divider(),
             ft.Row([
-                ft.OutlinedButton("隨機30題", on_click=lambda _: start_session("30")),
+                ft.OutlinedButton("隨機 30 題", on_click=lambda _: start_session("30")),
                 ft.OutlinedButton("複習 X", on_click=lambda _: start_session("review_x")),
                 ft.OutlinedButton("複習 O", on_click=lambda _: start_session("review_o")),
             ], alignment="center"),
-            ft.TextButton("清除所有紀錄", on_click=lambda _: reset_all(), icon=ft.icons.RECYCLING, icon_color="orange"),
+            ft.TextButton("清除所有標記紀錄", on_click=lambda _: reset_all(), font_family="Arial")
         ], horizontal_alignment="center")
     )
     update_total_info()
