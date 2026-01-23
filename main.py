@@ -112,20 +112,38 @@ def main(page: ft.Page):
         ], horizontal_alignment="center")
     )
 
-    # 修改後的 CSV 讀取路徑邏輯
-    # 網頁版 assets 資料夾在 GitHub Pages 上有時需特別指定
-    for path in ["assets/vocabulary_full_list.csv", "vocabulary_full_list.csv"]:
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding='utf-8-sig') as f:
-                    all_words = list(csv.DictReader(f))
-                    word_display.value = "載入成功"
-                    mean_display.value = f"共 {len(all_words)} 個單字"
-                    update_total_info()
-                    break
-            except:
-                continue
-    
-    page.update()
+# --- CSV 讀取修復區 ---
+    async def load_data():
+        nonlocal all_words
+        # 網頁版優先嘗試從 assets 讀取
+        paths_to_try = [
+            "assets/vocabulary_full_list.csv", 
+            "vocabulary_full_list.csv",
+            "/assets/vocabulary_full_list.csv"
+        ]
+        
+        success = False
+        for path in paths_to_try:
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding='utf-8-sig') as f:
+                        all_words = list(csv.DictReader(f))
+                        if all_words:
+                            word_display.value = "載入成功"
+                            mean_display.value = f"共 {len(all_words)} 個單字"
+                            update_total_info()
+                            success = True
+                            break
+                except:
+                    continue
+        
+        if not success:
+            mean_display.value = "找不到 CSV 檔案，請檢查 GitHub 檔案位置"
+        page.update()
+
+    # 執行讀取
+    import asyncio
+    asyncio.run(load_data())
+    # --------------------
 
 ft.app(target=main, assets_dir="assets")
