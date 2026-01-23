@@ -2,77 +2,77 @@ import flet as ft
 import csv
 import random
 import os
+import time
 
 def main(page: ft.Page):
-    # 針對 Android 13 的 UI 強制設定
+    # 1. 最強力的基礎設定
+    page.title = "HX Vocab"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.bgcolor = ft.colors.WHITE
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.padding = 40
-
-    word_display = ft.Text("點擊開始", size=40, weight="bold", color="blue")
-    mean_display = ft.Text("準備就緒", size=20, color="black")
-    debug_text = ft.Text("", size=10, color="grey")
+    page.bgcolor = "white"
+    page.padding = 30
+    
+    # 建立 UI 元件預算
+    word_display = ft.Text("載入中...", size=40, weight="bold", color="blue")
+    mean_display = ft.Text("請稍候", size=20, color="black")
+    log_text = ft.Text("Initializing...", size=10, color="grey")
     
     words = []
 
-    def load_data():
-        nonlocal words
-        # 定義多種可能的編碼，包含你提到的 cp950
-        target_encodings = ['cp950', 'utf-8-sig', 'big5', 'utf-8']
-        file_name = "vocabulary_full_list.csv"
-        
-        # 尋找檔案
-        path = file_name if os.path.exists(file_name) else f"assets/{file_name}"
-        
-        if not os.path.exists(path):
-            return "錯誤：找不到檔案，請確認 CSV 已上傳"
-
-        for enc in target_encodings:
-            try:
-                with open(path, "r", encoding=enc) as f:
-                    # 使用 DictReader 處理標頭
-                    reader = csv.DictReader(f)
-                    # 匹配你截圖中的繁體中文標頭
-                    temp = [row for row in reader if row.get('單字 (Word)')]
-                    if temp:
-                        words = temp
-                        return f"成功載入 ({enc})"
-            except Exception as e:
-                continue
-        return "錯誤：編碼不匹配 (嘗試過 CP950/UTF8)"
-
+    # 2. 定義切換單字邏輯
     def next_word(e):
         if words:
             pick = random.choice(words)
             word_display.value = pick.get('單字 (Word)', '欄位出錯')
             mean_display.value = pick.get('中文翻譯', '無翻譯')
-        else:
-            word_display.value = "無資料"
-        page.update()
+            page.update()
 
-    # 先畫 UI，確保畫面不會白屏
-    page.add(
-        ft.Column(
-            [
-                ft.Text("Nokia G21 專用版", size=12, color="grey-400"),
-                ft.Divider(),
-                word_display,
-                mean_display,
-                ft.Container(height=50),
-                ft.ElevatedButton("下一個單字", on_click=next_word, width=220, height=60),
-                ft.Container(height=20),
-                debug_text,
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER
-        )
+    # 3. 畫面佈局
+    container = ft.Column(
+        [
+            ft.Text("皇翔單字機 2.0 (Stable)", size=12, color="grey-400"),
+            ft.Divider(),
+            word_display,
+            mean_display,
+            ft.Container(height=40),
+            ft.ElevatedButton("下一個單字", on_click=next_word, width=200, height=50),
+            ft.Container(height=20),
+            log_text
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        alignment=ft.MainAxisAlignment.CENTER,
     )
+
+    # 4. 強制渲染流程：先放容器，再刷新
+    page.add(container)
+    page.update() 
     
-    # UI 顯示後才讀取
-    status = load_data()
-    debug_text.value = status
+    # 延遲一下下，給 Nokia 系統一點反應時間
+    time.sleep(0.5)
+
+    # 5. 嘗試讀取資料
+    csv_path = "vocabulary_full_list.csv"
+    if not os.path.exists(csv_path):
+        csv_path = f"assets/{csv_path}"
+
+    if os.path.exists(csv_path):
+        # 針對台灣 Excel 常用編碼進行循環嘗試
+        for enc in ['cp950', 'utf-8-sig', 'big5', 'utf-8']:
+            try:
+                with open(csv_path, "r", encoding=enc) as f:
+                    reader = csv.DictReader(f)
+                    words = [row for row in reader if row.get('單字 (Word)')]
+                    if words:
+                        word_display.value = "準備就緒"
+                        mean_display.value = f"已讀取 {len(words)} 個單字"
+                        log_text.value = f"Success with {enc}"
+                        break
+            except:
+                continue
+    else:
+        log_text.value = "Error: CSV file not found in root or assets"
+    
     page.update()
 
+# 使用非同步方式啟動，這是解決白屏的關鍵
 if __name__ == "__main__":
     ft.app(target=main)
