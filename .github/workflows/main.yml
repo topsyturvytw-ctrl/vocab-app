@@ -1,30 +1,36 @@
-name: Build Flet APK
+name: Deploy Flet Web to GitHub Pages
+
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches:
+      - main  # 當你更新 main.py 時自動執行
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
+          python-version: '3.10'
+
+      - name: Install Flet and Dependencies
+        run: |
+          pip install flet
+          # 如果你有其他 library，請在這裡加 pip install
+
+      - name: Build Web Version
+        run: |
+          # 將 main.py 編譯成網頁檔案，並指定基本路徑為專案名稱
+          flet publish main.py --base-url /${{ github.event.repository.name }}/
+
+      - name: Deploy to GitHub Pages
+        uses: Peaceiris/actions-gh-pages@v3
         with:
-          channel: 'stable'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install Flet
-        run: pip install flet
-      - name: Build APK
-        run: flet build apk
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: hx-app-final
-          path: build/apk/*.apk
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist  # flet publish 產出的資料夾
