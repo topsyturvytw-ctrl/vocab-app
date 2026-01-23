@@ -47,7 +47,7 @@ def main(page: ft.Page):
             try:
                 # 【!!! 重要：請將下方網址中的 [你的帳號] 和 [專案名] 換成你自己的 !!!】
                 # 這是直接抓取 GitHub 上的原始檔案路徑
-                csv_url = "https://raw.githubusercontent.com/topsyturvytw-ctrl/vocab-app/main/assets/vocabulary_full_list.csv"
+                csv_url = "https://github.com/topsyturvytw-ctrl/vocab-app/blob/main/assets/vocabulary_full_list.csv"
                 
                 response = requests.get(csv_url)
                 response.encoding = 'utf-8-sig'
