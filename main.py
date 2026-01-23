@@ -4,7 +4,7 @@ import random
 import io
 
 def get_all_words():
-    # 請在此貼上完整的 CSV 內容
+    # 請在此貼上完整 2127 個單字的 CSV 內容
     raw_csv_data = """單字 (Word),詞性 (POS),中文翻譯
 abandon,v.,放棄
 ability,n.,能力
@@ -20,7 +20,6 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
-    page.padding = 20
 
     all_words = get_all_words()
     session_words = []
@@ -44,6 +43,7 @@ def main(page: ft.Page):
     def update_ui():
         if session_words:
             w = session_words[current_index]
+            # 優先抓取 CSV 標頭，若失敗則依序抓取 0, 1, 2 欄位
             word_val = w.get('單字 (Word)') or list(w.values())[0]
             pos_val = w.get('詞性 (POS)') or list(w.values())[1]
             mean_val = w.get('中文翻譯') or list(w.values())[2]
@@ -58,6 +58,7 @@ def main(page: ft.Page):
         nonlocal current_index
         if not session_words or word_display.value in ["練習結束", "無資料"]: return
         
+        # 標記唯一 ID
         w_id = f"{word_display.value}_{mean_display.value}"
         rem = get_storage("rem_list")
         forg = get_storage("forg_list")
@@ -79,7 +80,7 @@ def main(page: ft.Page):
         else:
             word_display.value = "練習結束"
             pos_display.value = ""
-            mean_display.value = "點擊複習按鈕繼續"
+            mean_display.value = "切換模式繼續複習"
             page.update()
 
     def start_session(mode):
@@ -99,7 +100,7 @@ def main(page: ft.Page):
         if not session_words:
             word_display.value = "無資料"
             pos_display.value = ""
-            mean_display.value = "該標記清單目前是空的"
+            mean_display.value = "清單目前是空的"
             page.update()
         else:
             current_index = 0
@@ -110,9 +111,10 @@ def main(page: ft.Page):
         update_total_info()
         word_display.value = "已重置"
         pos_display.value = ""
-        mean_display.value = "所有標記已清空"
+        mean_display.value = "紀錄已清除"
         page.update()
 
+    # 極簡 UI 佈局，移除所有容易出錯的裝飾參數
     page.add(
         ft.Column([
             ft.Text("皇翔單字機 3.0", size=18, weight="bold"),
@@ -124,8 +126,8 @@ def main(page: ft.Page):
             stat_text,
             ft.Container(height=10),
             ft.Row([
-                ft.ElevatedButton("O 記得", on_click=lambda _: mark("O"), bgcolor="green", color="white", width=130),
-                ft.ElevatedButton("X 忘記", on_click=lambda _: mark("X"), bgcolor="red", color="white", width=130),
+                ft.ElevatedButton("O 記得", on_click=lambda _: mark("O"), bgcolor="green", color="white"),
+                ft.ElevatedButton("X 忘記", on_click=lambda _: mark("X"), bgcolor="red", color="white"),
             ], alignment="center"),
             ft.Divider(),
             ft.Row([
@@ -133,7 +135,7 @@ def main(page: ft.Page):
                 ft.OutlinedButton("複習 X", on_click=lambda _: start_session("review_x")),
                 ft.OutlinedButton("複習 O", on_click=lambda _: start_session("review_o")),
             ], alignment="center"),
-            ft.TextButton("清除所有標記紀錄", on_click=lambda _: reset_all(), font_family="Arial")
+            ft.TextButton("清除所有紀錄", on_click=lambda _: reset_all())
         ], horizontal_alignment="center")
     )
     update_total_info()
