@@ -4,82 +4,75 @@ import random
 import os
 
 def main(page: ft.Page):
-    # 強制設定基礎屬性，防止黑屏
-    page.title = "皇翔單字機 2.0"
+    # 1. 基礎強制設定：解決白屏問題
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.bgcolor = ft.colors.WHITE
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.bgcolor = "white"
+    page.window_always_on_top = True
+    page.vertical_alignment = "center"
+    page.horizontal_alignment = "center"
 
-    # 先定義好 UI，不要放進 Try 裡面
-    word_display = ft.Text("點擊下方按鈕", size=40, weight="bold", color="blue")
-    mean_display = ft.Text("等待中...", size=20, color="black")
-    error_info = ft.Text("", size=12, color="red")
+    # 2. 先把 UI 物件宣告出來
+    word_text = ft.Text("單字載入中...", size=40, color="blue", weight="bold")
+    mean_text = ft.Text("請稍候", size=20, color="black")
+    msg_text = ft.Text("系統準備就緒", size=12, color="green")
     
-    words = []
+    words_data = []
 
-    def load_csv_data():
-        nonlocal words
-        # 測試多個可能路徑
-        paths_to_check = ["vocabulary_full_list.csv", "assets/vocabulary_full_list.csv", "/assets/vocabulary_full_list.csv"]
-        target_path = ""
-        
-        for p in paths_to_check:
-            if os.path.exists(p):
-                target_path = p
-                break
-        
-        if not target_path:
-            return "錯誤：找不到 CSV 檔案，請確認檔案已上傳到 GitHub 根目錄"
-
-        # 嘗試編碼
-        for enc in ['utf-8-sig', 'big5', 'utf-8', 'cp950']:
-            try:
-                with open(target_path, mode='r', encoding=enc) as f:
-                    reader = csv.DictReader(f)
-                    # 根據你提供的截圖欄位名稱
-                    temp_list = [row for row in reader if row.get('單字 (Word)')]
-                    if temp_list:
-                        words = temp_list
-                        return None
-            except:
-                continue
-        return "錯誤：無法讀取 CSV 內容，請檢查欄位標頭"
-
-    def handle_click(e):
-        if words:
-            pick = random.choice(words)
-            # 對齊截圖中的欄位
-            word_display.value = pick.get('單字 (Word)', '欄位出錯')
-            mean_display.value = pick.get('中文翻譯', '無翻譯')
-            error_info.value = f"成功載入 {len(words)} 個單字"
+    # 3. 定義抓取單字的動作
+    def get_next(e):
+        if words_data:
+            p = random.choice(words_data)
+            word_text.value = p.get('單字 (Word)', '欄位出錯')
+            mean_text.value = p.get('中文翻譯', '無翻譯')
         else:
-            error_info.value = "目前無單字資料"
+            msg_text.value = "目前無資料，請確認 CSV 是否上傳"
         page.update()
 
-    # 畫面先建立出來，不論讀取成功與否
+    # 4. 立即把畫面塞進去，確保一開機有東西
     page.add(
         ft.Column(
             [
-                ft.Text("Huangxiang Vocab", size=16, color="grey-600"),
+                ft.Icon(ft.icons.CHURCH, color="gold", size=50), # 皇翔建設風格圖示
+                ft.Text("皇翔專屬單字機 2.0", size=16),
                 ft.Divider(),
-                word_display,
-                mean_display,
+                word_text,
+                mean_text,
                 ft.Container(height=40),
-                ft.ElevatedButton("下一個單字", on_click=handle_click, width=200),
+                ft.ElevatedButton("下一個", on_click=get_next, width=200, height=50),
                 ft.Container(height=20),
-                error_info,
+                msg_text,
             ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            horizontal_alignment="center",
         )
     )
-    
-    # UI 出來後再偷偷跑讀取
-    load_err = load_csv_data()
-    if load_err:
-        error_info.value = load_err
+    page.update()
+
+    # 5. 畫面出來後，才開始讀取檔案
+    csv_name = "vocabulary_full_list.csv"
+    try:
+        # 搜尋檔案
+        actual_path = csv_name if os.path.exists(csv_name) else f"assets/{csv_name}"
+        
+        if os.path.exists(actual_path):
+            # 嘗試編碼解決你的 0xb3 報錯
+            for c in ['utf-8-sig', 'big5', 'cp950']:
+                try:
+                    with open(actual_path, "r", encoding=c) as f:
+                        reader = csv.DictReader(f)
+                        words_data = [r for r in reader if r.get('單字 (Word)')]
+                        if words_data:
+                            msg_text.value = f"成功載入 {len(words_data)} 個皇翔精選單字"
+                            msg_text.color = "blue"
+                            break
+                except:
+                    continue
+        else:
+            msg_text.value = "錯誤：根目錄找不到 vocabulary_full_list.csv"
+            msg_text.color = "red"
+    except Exception as ex:
+        msg_text.value = f"系統錯誤: {str(ex)}"
+        msg_text.color = "red"
     
     page.update()
 
-if __name__ == "__main__":
-    ft.app(target=main)
+ft.app(target=main)
