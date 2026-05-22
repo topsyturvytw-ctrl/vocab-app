@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>皇翔單字機 3.0</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f8f9fa; padding: 20px; color: #333; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1 { font-size: 20px; margin-bottom: 5px; }
+        #total-info { font-size: 14px; color: #666; margin-bottom: 20px; }
+        #word { font-size: 45px; font-weight: bold; color: blue; margin: 20px 0 5px 0; cursor: pointer; }
+        #pos { font-size: 18px; font-style: italic; color: grey; margin-bottom: 15px; }
+        #mean { font-size: 24px; margin-bottom: 20px; min-height: 35px; }
+        #stat { font-size: 16px; color: grey; margin-bottom: 25px; }
+        button { font-size: 16px; padding: 12px 24px; margin: 5px; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .btn-o { background-color: green; color: white; }
+        .btn-x { background-color: red; color: white; }
+        .btn-mode { background-color: white; color: #333; border: 1px solid #ccc; }
+        .btn-speak { background-color: #e0e0e0; color: #333; font-size: 14px; padding: 8px 16px; }
+        .btn-clear { background-color: transparent; color: #999; font-size: 12px; text-decoration: underline; margin-top: 20px; }
+        hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>皇翔單字機 3.0</h1>
+    <div id="total-info">累計標記 -> O: 0 | X: 0</div>
+    <hr>
+    
+    <div id="word" onclick="speak()">皇翔單字機</div>
+    <div id="pos"></div>
+    <button class="btn-speak" onclick="speak()">📢 點此聽發音</button>
+    <div id="mean">請選擇模式開始</div>
+    <div id="stat"></div>
+    
+    <div>
+        <button class="btn-o" onclick="mark('O')">O 記住</button>
+        <button class="btn-x" onclick="mark('X')">X 忘記</button>
+    </div>
+    <hr>
+    <div>
+        <button class="btn-mode" onclick="startSession('30')">隨機 30 題</button>
+        <button class="btn-mode" onclick="startSession('X')">複習 X</button>
+        <button class="btn-mode" onclick="startSession('O')">複習 O</button>
+    </div>
+    
+    <button class="btn-clear" onclick="resetAll()">清除所有紀錄</button>
+</div>
+
+<script>
+// 📝 在這裡放入你完整的 2127 個單字，格式必須完全按照下面這樣：
+const allWords = [
+    {"word": "abandon", "pos": "v.", "mean": "放棄"},
+    {"word": "ability", "pos": "n.", "mean": "能力"},
+    {"word": "aboard", "pos": "adv./prep.", "mean": "在船(飛機/車)上"},
+    {"word": "about", "pos": "prep./adv.", "about": "關於"},
+    {"word": "above", "pos": "prep./adv.", "mean": "在...上方"}
+    // ... 請把剩下的 2100 多個單字照這個格式複製貼在下面
+];
+
+let sessionWords = [];
+let currentIndex = 0;
+
+// 💾 永久跨天記憶功能：直接存入瀏覽器最底層，重開絕對不會掉
+let remList = JSON.parse(localStorage.getItem('remList')) || [];
+let forgList = JSON.parse(localStorage.getItem('forgList')) || [];
+
+function updateTotalInfo() {
+    document.getElementById('total-info').innerText = `累計標記 -> O: ${remList.length} | X: ${forgList.length}`;
+}
+
+function speak() {
+    const wordText = document.getElementById('word').innerText;
+    if (["皇翔單字機", "練習結束", "無資料", "已重置"].includes(wordText)) return;
+    
+    // 🔊 呼叫手機/電腦系統原生發音引擎（Siri同款），100% 絕對有聲音
+    window.speechSynthesis.cancel();
+    const msg = new SpeechSynthesisUtterance(wordText);
+    msg.lang = 'en-US';
+    msg.rate = 0.85;
+    window.speechSynthesis.speak(msg);
+}
+
+function updateUI() {
+    if (sessionWords.length > 0) {
+        const w = sessionWords[currentIndex];
+        document.getElementById('word').innerText = w.word;
+        document.getElementById('pos').innerText = w.pos ? `(${w.pos})` : '';
+        document.getElementById('mean').innerText = w.mean;
+        document.getElementById('stat').innerText = `目前進度: ${currentIndex + 1} / ${sessionWords.length}`;
+        speak();
+    }
+}
+
+function mark(status) {
+    if (sessionWords.length === 0) return;
+    const wordText = document.getElementById('word').innerText;
+    if (["練習結束", "無資料"].includes(wordText)) return;
+
+    const w = sessionWords[currentIndex];
+    const wId = `${w.word}_${w.mean}`;
+
+    if (status === 'O') {
+        if (!remList.includes(wId)) remList.push(wId);
+        forgList = forgList.filter(item => item !== wId);
+    } else {
+        if (!forgList.includes(wId)) forgList.push(wId);
+        remList = remList.filter(item => item !== wId);
+    }
+
+    // 儲存到瀏覽器永久儲存區
+    localStorage.setItem('remList', JSON.stringify(remList));
+    localStorage.setItem('forgList', JSON.stringify(forgList));
+    updateTotalInfo();
+
+    if (currentIndex < sessionWords.length - 1) {
+        currentIndex++;
+        updateUI();
+    } else {
+        document.getElementById('word').innerText = "練習結束";
+        document.getElementById('pos').innerText = "";
+        document.getElementById('mean').innerText = "切換模式繼續複習";
+        document.getElementById('stat').innerText = "";
+    }
+}
+
+function startSession(mode) {
+    if (mode === '30') {
+        const shuffled = [...allWords].sort(() => 0.5 - Math.random());
+        sessionWords = shuffled.slice(0, Math.min(30, allWords.length));
+    } else if (mode === 'O') {
+        sessionWords = allWords.filter(w => remList.includes(`${w.word}_${w.mean}`));
+    } else if (mode === 'X') {
+        sessionWords = allWords.filter(w => forgList.includes(`${w.word}_${w.mean}`));
+    }
+
+    if (sessionWords.length === 0) {
+        document.getElementById('word').innerText = "無資料";
+        document.getElementById('pos').innerText = "";
+        document.getElementById('mean').innerText = "清單目前是空的";
+        document.getElementById('stat').innerText = "";
+    } else {
+        currentIndex = 0;
+        updateUI();
+    }
+}
+
+function resetAll() {
+    localStorage.clear();
+    remList = [];
+    forgList = [];
+    updateTotalInfo();
+    document.getElementById('word').innerText = "已重置";
+    document.getElementById('pos').innerText = "";
+    document.getElementById('mean').innerText = "紀錄已清除";
+    document.getElementById('stat').innerText = "";
+}
+
+// 初始化顯示
+updateTotalInfo();
+</script>
+</body>
+</html>
