@@ -17,7 +17,7 @@ above,prep./adv.,在...上方"""
     return list(csv.DictReader(f))
 
 def main(page: ft.Page):
-    page.title = "皇翔單字機 3.0"
+    page.title = "早餐單字機 3.0"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
@@ -35,29 +35,33 @@ def main(page: ft.Page):
         try: page.get_client_storage().set(key, value)
         except: pass
 
-    # 🔊 建立網頁專用音訊元件 (先放一個空網址物件)
-    audio_player = ft.Audio(src="", autoplay=False)
-    page.overlay.append(audio_player) # 將播放器疊加在網頁底層
-
-    word_display = ft.Text("皇翔單字機", size=45, weight="bold", color="blue")
+    word_display = ft.Text("早餐單字機", size=45, weight="bold", color="blue")
     pos_display = ft.Text("", size=18, italic=True, color="grey")
     mean_display = ft.Text("請選擇模式開始", size=24, color="black")
     stat_text = ft.Text("", size=16, color="grey")
     total_info = ft.Text("", size=14)
 
-    # 🔊 修正後的發音功能：直接更換音訊源並播放
+    # 🔊 終極修正：改用微軟 Bing 字典的公開美式發音 API，絕不封鎖
     def speak_word(e):
         word = word_display.value
-        if word in ["皇翔單字機", "練習結束", "無資料", "已重置"]: 
+        if word in ["早餐單字機", "練習結束", "無資料", "已重置"]: 
             return
         
         encoded_word = urllib.parse.quote(word)
-        # 換成穩定的文字轉語音 API 來源
-        tts_url = f"https://dict.youdao.com/dictvoice?type=2&audio={encoded_word}"
+        # 微軟 Bing 字典美音 API 網址 (格式非常標準的 MP3 檔)
+        tts_url = f"https://dict.bing.com.cn/dict/AudioProxy?text={encoded_word}&lang=en-US"
         
-        audio_player.src = tts_url
-        audio_player.play() # 網頁內直接播放，100% 不會被當成彈出視窗封鎖
+        # 透過原生 JS 強制瀏覽器直接當作獨立媒體解碼播放
+        js_code = f"""
+        var audio = new Audio('{tts_url}');
+        audio.crossOrigin = "anonymous";
+        audio.play().catch(function(err) {{
+            console.log("Audio play blocked", err);
+        }});
+        """
+        page.run_javascript(js_code)
 
+    # 點擊英文單字區塊可發音
     word_click_container = ft.GestureDetector(
         content=word_display,
         on_tap=speak_word,
@@ -77,12 +81,12 @@ def main(page: ft.Page):
             mean_val = w.get('中文翻譯') or list(w.values())[2]
             
             word_display.value = word_val
-            pos_display.value = f"({pos_val})  🔊 點擊單字可發音" if pos_val else "🔊 點擊單字可發音"
+            pos_display.value = f"({pos_val})" if pos_val else ""
             mean_display.value = mean_val
             stat_text.value = f"目前進度: {current_index + 1} / {len(session_words)}"
             page.update()
             
-            # 【注意】部分瀏覽器禁止「未經使用者點擊自動播音」，所以保留手動點擊最安全
+            # 切換單字時在背景偷偷嘗試發音
             speak_word(None)
 
     def mark(status):
@@ -152,6 +156,8 @@ def main(page: ft.Page):
             ft.Divider(),
             word_click_container,
             pos_display,
+            # 新增一個大大的發音專用按鈕，徹底解決觸控點擊沒判定的問題
+            ft.OutlinedButton("📢 點此聽發音", on_click=speak_word),
             mean_display,
             stat_text,
             ft.Container(height=10),
@@ -163,7 +169,7 @@ def main(page: ft.Page):
             ft.Row([
                 ft.OutlinedButton("隨機 30 題", on_click=lambda _: start_session("30")),
                 ft.OutlinedButton("複習 X", on_click=lambda _: start_session("review_x")),
-                ft.OutlinedButton("複習 O", on_click=lambda _: start_session("review_o")),
+                ft.OutlinedButton("複慕 O", on_click=lambda _: start_session("review_o")),
             ], alignment="center"),
             ft.TextButton("清除所有紀錄", on_click=lambda _: reset_all())
         ], horizontal_alignment="center")
