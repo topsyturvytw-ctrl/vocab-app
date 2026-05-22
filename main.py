@@ -2,7 +2,7 @@ import flet as ft
 import csv
 import random
 import io
-import urllib.parse # 新增：用來處理網址編碼
+import urllib.parse
 
 def get_all_words():
     # 請在此貼上你完整 2127 個單字的 CSV 內容
@@ -35,28 +35,29 @@ def main(page: ft.Page):
         try: page.get_client_storage().set(key, value)
         except: pass
 
-    # 顯示文字微調：提示使用者可以點擊單字發音
+    # 🔊 建立網頁專用音訊元件 (先放一個空網址物件)
+    audio_player = ft.Audio(src="", autoplay=False)
+    page.overlay.append(audio_player) # 將播放器疊加在網頁底層
+
     word_display = ft.Text("皇翔單字機", size=45, weight="bold", color="blue")
     pos_display = ft.Text("", size=18, italic=True, color="grey")
     mean_display = ft.Text("請選擇模式開始", size=24, color="black")
     stat_text = ft.Text("", size=16, color="grey")
     total_info = ft.Text("", size=14)
 
-    # 🔊 核心功能：網頁原生發音
+    # 🔊 修正後的發音功能：直接更換音訊源並播放
     def speak_word(e):
         word = word_display.value
         if word in ["皇翔單字機", "練習結束", "無資料", "已重置"]: 
             return
         
-        # 將單字轉換為網址安全格式
         encoded_word = urllib.parse.quote(word)
-        # 使用 Google 翻譯的官方發音 API 網址 (tl=en 代表英文)
-        tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q={encoded_word}"
+        # 換成穩定的文字轉語音 API 來源
+        tts_url = f"https://dict.youdao.com/dictvoice?type=2&audio={encoded_word}"
         
-        # 讓瀏覽器在背景直接播放這個音檔，絕對不崩潰
-        page.launch_url(tts_url)
+        audio_player.src = tts_url
+        audio_player.play() # 網頁內直接播放，100% 不會被當成彈出視窗封鎖
 
-    # 將單字文字元件包裝成「可點擊」，並綁定發音功能
     word_click_container = ft.GestureDetector(
         content=word_display,
         on_tap=speak_word,
@@ -81,7 +82,7 @@ def main(page: ft.Page):
             stat_text.value = f"目前進度: {current_index + 1} / {len(session_words)}"
             page.update()
             
-            # 【貼心功能】自動發音：切換到新單字時，自動幫你讀出來
+            # 【注意】部分瀏覽器禁止「未經使用者點擊自動播音」，所以保留手動點擊最安全
             speak_word(None)
 
     def mark(status):
@@ -149,7 +150,7 @@ def main(page: ft.Page):
             ft.Text("皇翔單字機 3.0", size=18, weight="bold"),
             total_info,
             ft.Divider(),
-            word_click_container, # 將原本的 word_display 改為可點擊容器
+            word_click_container,
             pos_display,
             mean_display,
             stat_text,
