@@ -11,8 +11,7 @@ ability,n.,能力
 aboard,adv./prep.,在船(飛機/車)上
 about,prep./adv.,關於
 above,prep./adv.,在...上方"""
-accord,n,一致、符合
-acceptable,a,可接受的    
+  
     f = io.StringIO(raw_csv_data.strip())
     return list(csv.DictReader(f))
 
