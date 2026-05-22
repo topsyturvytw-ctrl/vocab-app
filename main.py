@@ -2,6 +2,7 @@ import flet as ft
 import csv
 import random
 import io
+import urllib.parse # 新增：用來處理網址編碼
 
 def get_all_words():
     # 請在此貼上你完整 2127 個單字的 CSV 內容
@@ -11,12 +12,12 @@ ability,n.,能力
 aboard,adv./prep.,在船(飛機/車)上
 about,prep./adv.,關於
 above,prep./adv.,在...上方"""
-  
+    
     f = io.StringIO(raw_csv_data.strip())
     return list(csv.DictReader(f))
 
 def main(page: ft.Page):
-    page.title = "早餐單字機 3.0"
+    page.title = "皇翔單字機 3.0"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
@@ -26,24 +27,40 @@ def main(page: ft.Page):
     session_words = []
     current_index = 0
     
-    # 核心安全修正：改用符合新版 Flet 規範的方法呼叫，確保跨天記憶
     def get_storage(key):
-        try:
-            return page.get_client_storage().get(key) or []
-        except:
-            return []
+        try: return page.get_client_storage().get(key) or []
+        except: return []
 
     def set_storage(key, value):
-        try:
-            page.get_client_storage().set(key, value)
-        except:
-            pass
+        try: page.get_client_storage().set(key, value)
+        except: pass
 
+    # 顯示文字微調：提示使用者可以點擊單字發音
     word_display = ft.Text("皇翔單字機", size=45, weight="bold", color="blue")
     pos_display = ft.Text("", size=18, italic=True, color="grey")
     mean_display = ft.Text("請選擇模式開始", size=24, color="black")
     stat_text = ft.Text("", size=16, color="grey")
     total_info = ft.Text("", size=14)
+
+    # 🔊 核心功能：網頁原生發音
+    def speak_word(e):
+        word = word_display.value
+        if word in ["皇翔單字機", "練習結束", "無資料", "已重置"]: 
+            return
+        
+        # 將單字轉換為網址安全格式
+        encoded_word = urllib.parse.quote(word)
+        # 使用 Google 翻譯的官方發音 API 網址 (tl=en 代表英文)
+        tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q={encoded_word}"
+        
+        # 讓瀏覽器在背景直接播放這個音檔，絕對不崩潰
+        page.launch_url(tts_url)
+
+    # 將單字文字元件包裝成「可點擊」，並綁定發音功能
+    word_click_container = ft.GestureDetector(
+        content=word_display,
+        on_tap=speak_word,
+    )
 
     def update_total_info():
         rem = get_storage("rem_list")
@@ -59,16 +76,18 @@ def main(page: ft.Page):
             mean_val = w.get('中文翻譯') or list(w.values())[2]
             
             word_display.value = word_val
-            pos_display.value = f"({pos_val})" if pos_val else ""
+            pos_display.value = f"({pos_val})  🔊 點擊單字可發音" if pos_val else "🔊 點擊單字可發音"
             mean_display.value = mean_val
             stat_text.value = f"目前進度: {current_index + 1} / {len(session_words)}"
             page.update()
+            
+            # 【貼心功能】自動發音：切換到新單字時，自動幫你讀出來
+            speak_word(None)
 
     def mark(status):
         nonlocal current_index
         if not session_words or word_display.value in ["練習結束", "無資料"]: return
         
-        # 建立唯一 ID
         w_id = f"{word_display.value}_{mean_display.value}"
         rem = get_storage("rem_list")
         forg = get_storage("forg_list")
@@ -117,23 +136,20 @@ def main(page: ft.Page):
             update_ui()
 
     def reset_all():
-        try:
-            page.get_client_storage().clear()
-        except:
-            pass
+        try: page.get_client_storage().clear()
+        except: pass
         update_total_info()
         word_display.value = "已重置"
         pos_display.value = ""
         mean_display.value = "紀錄已清除"
         page.update()
 
-    # 極簡無干擾 UI
     page.add(
         ft.Column([
             ft.Text("皇翔單字機 3.0", size=18, weight="bold"),
             total_info,
             ft.Divider(),
-            word_display,
+            word_click_container, # 將原本的 word_display 改為可點擊容器
             pos_display,
             mean_display,
             stat_text,
