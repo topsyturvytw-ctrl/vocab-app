@@ -83,4 +83,86 @@ def main(page: ft.Page):
         nonlocal current_index
         if not session_words or word_display.value in ["練習結束", "無資料"]: return
         
-        w_id = f"{word_display.value}_{mean_
+        w_id = f"{word_display.value}_{mean_display.value}"
+        rem = get_storage("rem_list")
+        forg = get_storage("forg_list")
+        
+        if status == "O":
+            if w_id not in rem: rem.append(w_id)
+            if w_id in forg: forg.remove(w_id)
+        else:
+            if w_id not in forg: forg.append(w_id)
+            if w_id in rem: rem.remove(w_id)
+            
+        set_storage("rem_list", rem)
+        set_storage("forg_list", forg)
+        update_total_info()
+
+        if current_index < len(session_words) - 1:
+            current_index += 1
+            update_ui()
+        else:
+            word_display.value = "練習結束"
+            pos_display.value = ""
+            mean_display.value = "切換模式繼續複習"
+            page.update()
+
+    def start_session(mode):
+        nonlocal session_words, current_index
+        if not all_words: return
+        
+        rem = get_storage("rem_list")
+        forg = get_storage("forg_list")
+
+        if mode == "30":
+            session_words = random.sample(all_words, min(30, len(all_words)))
+        elif mode == "review_o":
+            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[2])}" in rem]
+        elif mode == "review_x":
+            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[2])}" in forg]
+        
+        if not session_words:
+            word_display.value = "無資料"
+            pos_display.value = ""
+            mean_display.value = "清單目前是空的"
+            page.update()
+        else:
+            current_index = 0
+            update_ui()
+
+    def reset_all():
+        try: page.get_client_storage().clear()
+        except: pass
+        update_total_info()
+        word_display.value = "已重置"
+        pos_display.value = ""
+        mean_display.value = "紀錄已清除"
+        page.update()
+
+    page.add(
+        ft.Column([
+            ft.Text("皇翔單字機 3.0", size=18, weight="bold"),
+            total_info,
+            ft.Divider(),
+            word_click_container,
+            pos_display,
+            ft.OutlinedButton("📢 點此聽發音", on_click=speak_word),
+            mean_display,
+            stat_text,
+            ft.Container(height=10),
+            ft.Row([
+                ft.ElevatedButton("O 記得", on_click=lambda _: mark("O"), bgcolor="green", color="white"),
+                ft.ElevatedButton("X 忘記", on_click=lambda _: mark("X"), bgcolor="red", color="white"),
+            ], alignment="center"),
+            ft.Divider(),
+            ft.Row([
+                ft.OutlinedButton("隨機 30 題", on_click=lambda _: start_session("30")),
+                ft.OutlinedButton("複習 X", on_click=lambda _: start_session("review_x")),
+                ft.OutlinedButton("複習 O", on_click=lambda _: start_session("review_o")),
+            ], alignment="center"),
+            ft.TextButton("清除所有紀錄", on_click=lambda _: reset_all())
+        ], horizontal_alignment="center")
+    )
+    update_total_info()
+
+ft.app(target=main)
