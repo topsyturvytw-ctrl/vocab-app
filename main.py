@@ -4,7 +4,7 @@ import random
 import io
 
 def get_all_words():
-    # 請在此貼上完整 2127 個單字的 CSV 內容
+    # 請在此貼上你完整 2127 個單字的 CSV 內容
     raw_csv_data = """單字 (Word),詞性 (POS),中文翻譯
 abandon,v.,放棄
 ability,n.,能力
@@ -20,13 +20,24 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
+    page.padding = 20
 
     all_words = get_all_words()
     session_words = []
     current_index = 0
     
-    def get_storage(key): return page.client_storage.get(key) or []
-    def set_storage(key, value): page.client_storage.set(key, value)
+    # 核心安全修正：改用符合新版 Flet 規範的方法呼叫，確保跨天記憶
+    def get_storage(key):
+        try:
+            return page.get_client_storage().get(key) or []
+        except:
+            return []
+
+    def set_storage(key, value):
+        try:
+            page.get_client_storage().set(key, value)
+        except:
+            pass
 
     word_display = ft.Text("皇翔單字機", size=45, weight="bold", color="blue")
     pos_display = ft.Text("", size=18, italic=True, color="grey")
@@ -43,7 +54,6 @@ def main(page: ft.Page):
     def update_ui():
         if session_words:
             w = session_words[current_index]
-            # 優先抓取 CSV 標頭，若失敗則依序抓取 0, 1, 2 欄位
             word_val = w.get('單字 (Word)') or list(w.values())[0]
             pos_val = w.get('詞性 (POS)') or list(w.values())[1]
             mean_val = w.get('中文翻譯') or list(w.values())[2]
@@ -58,7 +68,7 @@ def main(page: ft.Page):
         nonlocal current_index
         if not session_words or word_display.value in ["練習結束", "無資料"]: return
         
-        # 標記唯一 ID
+        # 建立唯一 ID
         w_id = f"{word_display.value}_{mean_display.value}"
         rem = get_storage("rem_list")
         forg = get_storage("forg_list")
@@ -107,14 +117,17 @@ def main(page: ft.Page):
             update_ui()
 
     def reset_all():
-        page.client_storage.clear()
+        try:
+            page.get_client_storage().clear()
+        except:
+            pass
         update_total_info()
         word_display.value = "已重置"
         pos_display.value = ""
         mean_display.value = "紀錄已清除"
         page.update()
 
-    # 極簡 UI 佈局，移除所有容易出錯的裝飾參數
+    # 極簡無干擾 UI
     page.add(
         ft.Column([
             ft.Text("皇翔單字機 3.0", size=18, weight="bold"),
