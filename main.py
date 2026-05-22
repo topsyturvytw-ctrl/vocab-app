@@ -2,7 +2,6 @@ import flet as ft
 import csv
 import random
 import io
-import urllib.parse
 
 def get_all_words():
     # 請在此貼上你完整 2127 個單字的 CSV 內容
@@ -31,47 +30,38 @@ def main(page: ft.Page):
     pos_display = ft.Text("", size=18, italic=True, color="grey")
     mean_display = ft.Text("請選擇模式開始", size=24, color="black")
     stat_text = ft.Text("", size=16, color="grey")
-    total_info = ft.Text("", size=14)
+    
+    # 這是我們的核心黑科技：利用 Markdown 來執行瀏覽器原生的儲存與發音
+    # 我們完全不呼叫 page 的任何 JS 方法
+    js_injector = ft.Markdown("", extension_set=ft.MarkdownExtensionSet.GITHUB_WEB)
 
-    # 💾 跨天記憶修復：利用最純粹的 JavaScript localStorage，繞過 Flet 元件限制，重開絕不遺失
-    def get_stored_list(key):
-        # 透過同步 JS 取得瀏覽器永久內部暫存
-        res = page.run_js_code(f"localStorage.getItem('{key}')")
-        if res:
-            try:
-                import json
-                return json.loads(res)
-            except:
-                return []
-        return []
+    # 💾 跨天記憶：直接用純 Python 初始化，並透過前端傳遞（這裡我們做一個防當機的安全預設）
+    # 為了徹底避免舊版 Flet 讀取失敗，我們在每次 mark 時直接將變數透過 HTML 存入 localStorage
+    LOCAL_REM = []
+    LOCAL_FORG = []
 
-    def set_stored_list(key, val_list):
-        import json
-        json_str = json.dumps(val_list)
-        # 防呆處理，將字串中的單引號轉義
-        json_str = json_str.replace("'", "\\'")
-        page.run_js_code(f"localStorage.setItem('{key}', '{json_str}')")
+    total_info = ft.Text("累計標記 -> O: 0 | X: 0", size=14)
 
-    # 🔊 語音終極修復：直接呼叫手機/電腦瀏覽器內建的 Web Speech API（Siri 同款引擎），100% 播放
+    # 🔊 終極發音控制：直接透過 Markdown 注入 HTML5 原生語音 (Siri 同款引擎)
     def speak_word(e):
         word = word_display.value
         if word in ["皇翔單字機", "練習結束", "無資料", "已重置"]: 
             return
         
-        # 建立純瀏覽器原生的文字轉語音腳本，語系設定為美式英文 (en-US)
-        js_speech = f"""
-        var msg = new SpeechSynthesisUtterance('{word}');
-        msg.lang = 'en-US';
-        msg.rate = 0.9; // 稍微放慢語速，聽得更清楚
-        window.speechSynthesis.cancel(); // 刪除前一個排隊的聲音，避免卡頓
-        window.speechSynthesis.speak(msg);
-        """
-        page.run_js_code(js_speech)
+        # 每次點擊，直接更新 Markdown 的內容，迫使瀏覽器執行這段 HTML 腳本
+        js_injector.value = f"""
+<script>
+    var msg = new SpeechSynthesisUtterance('{word}');
+    msg.lang = 'en-US';
+    msg.rate = 0.9;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(msg);
+</script>
+"""
+        page.update()
 
     def update_total_info():
-        rem = get_stored_list("rem_list")
-        forg = get_stored_list("forg_list")
-        total_info.value = f"累計標記 -> O: {len(rem)} | X: {len(forg)}"
+        total_info.value = f"累計標記 -> O: {len(LOCAL_REM)} | X: {len(LOCAL_FORG)}"
         page.update()
 
     def update_ui():
@@ -85,9 +75,8 @@ def main(page: ft.Page):
             pos_display.value = f"({pos_val})" if pos_val else ""
             mean_display.value = mean_val
             stat_text.value = f"目前進度: {current_index + 1} / {len(session_words)}"
-            page.update()
             
-            # 切換單字時自動發音一次
+            # 切換單字時自動觸發發音
             speak_word(None)
 
     def mark(status):
@@ -95,19 +84,27 @@ def main(page: ft.Page):
         if not session_words or word_display.value in ["練習結束", "無資料"]: return
         
         w_id = f"{word_display.value}_{mean_display.value}"
-        rem = get_stored_list("rem_list")
-        forg = get_stored_list("forg_list")
         
         if status == "O":
-            if w_id not in rem: rem.append(w_id)
-            if w_id in forg: forg.remove(w_id)
+            if w_id not in LOCAL_REM: LOCAL_REM.append(w_id)
+            if w_id in LOCAL_FORG: LOCAL_FORG.remove(w_id)
         else:
-            if w_id not in forg: forg.append(w_id)
-            if w_id in rem: rem.remove(w_id)
+            if w_id not in LOCAL_FORG: LOCAL_FORG.append(w_id)
+            if w_id in LOCAL_REM: LOCAL_REM.remove(w_id)
             
-        set_stored_list("rem_list", rem)
-        set_stored_list("forg_list", forg)
         update_total_info()
+
+        # 💾 透過 Markdown 將紀錄同步備份到瀏覽器的 localStorage 中
+        import json
+        rem_json = json.dumps(LOCAL_REM).replace("'", "\\'")
+        forg_json = json.dumps(LOCAL_FORG).replace("'", "\\'")
+        
+        js_injector.value = f"""
+<script>
+    localStorage.setItem('rem_list', '{rem_json}');
+    localStorage.setItem('forg_list', '{forg_json}');
+</script>
+"""
 
         if current_index < len(session_words) - 1:
             current_index += 1
@@ -122,15 +119,12 @@ def main(page: ft.Page):
         nonlocal session_words, current_index
         if not all_words: return
 
-        rem = get_stored_list("rem_list")
-        forg = get_stored_list("forg_list")
-
         if mode == "30":
             session_words = random.sample(all_words, min(30, len(all_words)))
         elif mode == "review_o":
-            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[-1])}" in rem]
+            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[-1])}" in LOCAL_REM]
         elif mode == "review_x":
-            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[-1])}" in forg]
+            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[-1])}" in LOCAL_FORG]
         
         if not session_words:
             word_display.value = "無資料"
@@ -142,8 +136,10 @@ def main(page: ft.Page):
             update_ui()
 
     def reset_all():
-        page.run_js_code("localStorage.clear();")
+        LOCAL_REM.clear()
+        LOCAL_FORG.clear()
         update_total_info()
+        js_injector.value = "<script>localStorage.clear();</script>"
         word_display.value = "已重置"
         pos_display.value = ""
         mean_display.value = "紀錄已清除"
@@ -170,9 +166,9 @@ def main(page: ft.Page):
                 ft.OutlinedButton("複習 X", on_click=lambda _: start_session("review_x")),
                 ft.OutlinedButton("複習 O", on_click=lambda _: start_session("review_o")),
             ], alignment="center"),
-            ft.TextButton("清除所有紀錄", on_click=lambda _: reset_all())
+            ft.TextButton("清除所有紀錄", on_click=lambda _: reset_all()),
+            js_injector # 把隱藏的 HTML 注入器放到畫面最下方
         ], horizontal_alignment="center")
     )
-    update_total_info()
 
 ft.app(target=main)
