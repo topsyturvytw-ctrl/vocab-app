@@ -16,6 +16,10 @@ above,prep./adv.,在...上方"""
     f = io.StringIO(raw_csv_data.strip())
     return list(csv.DictReader(f))
 
+# 使用純 Python 全域變數作為記憶體緩衝，徹底繞過瀏覽器儲存區封鎖
+MEMORY_REM = []
+MEMORY_FORG = []
+
 def main(page: ft.Page):
     page.title = "皇翔單字機 3.0"
     page.theme_mode = ft.ThemeMode.LIGHT
@@ -26,14 +30,6 @@ def main(page: ft.Page):
     all_words = get_all_words()
     session_words = []
     current_index = 0
-    
-    def get_storage(key):
-        try: return page.get_client_storage().get(key) or []
-        except: return []
-
-    def set_storage(key, value):
-        try: page.get_client_storage().set(key, value)
-        except: pass
 
     word_display = ft.Text("皇翔單字機", size=45, weight="bold", color="blue")
     pos_display = ft.Text("", size=18, italic=True, color="grey")
@@ -41,29 +37,19 @@ def main(page: ft.Page):
     stat_text = ft.Text("", size=16, color="grey")
     total_info = ft.Text("", size=14)
 
-    # 🔊 終極回歸：使用最純粹的 launch_url，完全不使用任何音訊控制項
+    # 🔊 繞過 Flet 的音訊播放：直接動態打開隱藏超連結讓網頁核心去解碼
     def speak_word(e):
         word = word_display.value
         if word in ["皇翔單字機", "練習結束", "無資料", "已重置"]: 
             return
         
         encoded_word = urllib.parse.quote(word)
-        # 採用最不易被跨網域封鎖的 Google 語音連結
+        # 採用最通用的 Google 翻譯發音 API
         tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q={encoded_word}"
-        
-        # 直接由瀏覽器核心接管這個 URL，100% 不會引發 Flet 元件錯誤
         page.launch_url(tts_url)
 
-    # 點擊英文單字亦可觸發 launch
-    word_click_container = ft.GestureDetector(
-        content=word_display,
-        on_tap=speak_word,
-    )
-
     def update_total_info():
-        rem = get_storage("rem_list")
-        forg = get_storage("forg_list")
-        total_info.value = f"累計標記 -> O: {len(rem)} | X: {len(forg)}"
+        total_info.value = f"累計標記 -> O: {len(MEMORY_REM)} | X: {len(MEMORY_FORG)}"
         page.update()
 
     def update_ui():
@@ -84,18 +70,14 @@ def main(page: ft.Page):
         if not session_words or word_display.value in ["練習結束", "無資料"]: return
         
         w_id = f"{word_display.value}_{mean_display.value}"
-        rem = get_storage("rem_list")
-        forg = get_storage("forg_list")
         
         if status == "O":
-            if w_id not in rem: rem.append(w_id)
-            if w_id in forg: forg.remove(w_id)
+            if w_id not in MEMORY_REM: MEMORY_REM.append(w_id)
+            if w_id in MEMORY_FORG: MEMORY_FORG.remove(w_id)
         else:
-            if w_id not in forg: forg.append(w_id)
-            if w_id in rem: rem.remove(w_id)
+            if w_id not in MEMORY_FORG: MEMORY_FORG.append(w_id)
+            if w_id in MEMORY_REM: MEMORY_REM.remove(w_id)
             
-        set_storage("rem_list", rem)
-        set_storage("forg_list", forg)
         update_total_info()
 
         if current_index < len(session_words) - 1:
@@ -110,16 +92,13 @@ def main(page: ft.Page):
     def start_session(mode):
         nonlocal session_words, current_index
         if not all_words: return
-        
-        rem = get_storage("rem_list")
-        forg = get_storage("forg_list")
 
         if mode == "30":
             session_words = random.sample(all_words, min(30, len(all_words)))
         elif mode == "review_o":
-            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[2])}" in rem]
+            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[2])}" in MEMORY_REM]
         elif mode == "review_x":
-            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[2])}" in forg]
+            session_words = [w for w in all_words if f"{(w.get('單字 (Word)') or list(w.values())[0])}_{(w.get('中文翻譯') or list(w.values())[2])}" in MEMORY_FORG]
         
         if not session_words:
             word_display.value = "無資料"
@@ -131,8 +110,8 @@ def main(page: ft.Page):
             update_ui()
 
     def reset_all():
-        try: page.get_client_storage().clear()
-        except: pass
+        MEMORY_REM.clear()
+        MEMORY_FORG.clear()
         update_total_info()
         word_display.value = "已重置"
         pos_display.value = ""
@@ -144,7 +123,7 @@ def main(page: ft.Page):
             ft.Text("皇翔單字機 3.0", size=18, weight="bold"),
             total_info,
             ft.Divider(),
-            word_click_container,
+            word_display,
             pos_display,
             ft.OutlinedButton("📢 點此聽發音", on_click=speak_word),
             mean_display,
